@@ -2,81 +2,107 @@ import React, { useContext, useEffect, useState } from 'react';
 import { Image, StyleSheet, Text, View, ActivityIndicator, ScrollView } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_KEY } from '@env';
+import {selectedDay, selectedMonth, selectedYear} from './DateComponent.js';
 
-
-const FootballContent = () => {
+const formatMonth = (month) => {
+  // Ay değerini 1 artır ve iki haneli hale getir (01, 02, ..., 12)
+  return String(month + 1).padStart(2, '0');
+};
+const FootballContent = ({ day, month, year }) => {
     const [matches, setMatches] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
     const [leagueId, setLeagueId] = useState([322, 318, 152, 302, 207]); // İlgili Lig ID'leri
     const [countryId, setCountryId] = useState([111, 44, 6, 5]); // Ülke ID'leri
     const [leaguesByCountry, setLeaguesByCountry] = useState({}); // Ülkeye göre ligler
 
-
+  
     useEffect(() => {
-        const fetchData = async () => {
-            try {
-                let combinedMatches = [];
-                let leaguesByCountryTemp = {};
-
-                for (let i = 0; i < countryId.length; i++) {
-                    const id = countryId[i];
-
-
-                    // Lig Bilgilerini Çek
-                    const leagueResponse = await fetch(
-                       `https://apiv2.allsportsapi.com/football/?met=Leagues&APIkey=${API_KEY}&countryId=${id}`
-                    );
-                    const leagueData = await leagueResponse.json();
-
-                    if (leagueData.success === 1) {
-                        leaguesByCountryTemp[id] = leagueData.result.filter((league) =>
-                            leagueId.includes(league.league_key)
-                        );
-
-
-                        for (const league of leaguesByCountryTemp[id]) {
-
-                            const matchResponse = await fetch(
-                               `https://apiv2.allsportsapi.com/football/?met=Fixtures&APIkey=${API_KEY}&from=2024-12-22&to=2024-12-22&leagueId=${league.league_key}`
-                            );
-                            const matchData = await matchResponse.json();
-
-                            if (matchData.success === 1) {
-                                combinedMatches = [...combinedMatches, ...matchData.result];
-                            }
-                        }
-                    }
+      const fetchData = async () => {
+        try {
+          setLoading(true); // Yeni tarih seçildiğinde yükleme ekranını göster
+          let combinedMatches = [];
+          let leaguesByCountryTemp = {};
+     
+          
+          for (let i = 0; i < countryId.length; i++) {
+            const id = countryId[i];
+            const currentMonth = formatMonth(month);
+            
+            // Lig Bilgilerini Çek
+            const leagueResponse = await fetch(
+              `https://apiv2.allsportsapi.com/football/?met=Leagues&APIkey=${API_KEY}&countryId=${id}`
+            );
+            const leagueData = await leagueResponse.json();
+    
+            if (leagueData.success === 1 && leagueData.result) {
+              let leaguesWithMatches = [];
+    
+              for (const league of leagueData.result.filter((league) =>
+                leagueId.includes(league.league_key)
+              )) {
+                const matchResponse = await fetch(
+                  `https://apiv2.allsportsapi.com/football/?met=Fixtures&APIkey=${API_KEY}&from=${year}-${currentMonth}-${day}&to=${year}-${currentMonth}-${day}&leagueId=${league.league_key}`
+                );
+                const matchData = await matchResponse.json();
+    
+                // Maç kontrolü
+                if (
+                  matchData.success === 1 &&
+                  Array.isArray(matchData.result) &&
+                  matchData.result.length > 0
+                ) {
+                  leaguesWithMatches.push(league); // Maçları olan ligleri ekle
+                  combinedMatches = [...combinedMatches, ...matchData.result];
                 }
-
-                setLeaguesByCountry(leaguesByCountryTemp);
-                setMatches(combinedMatches);
-            } catch (error) {
-                console.error('Error fetching data:', error);
-            } finally {
-                setLoading(false);
+              }
+    
+              if (leaguesWithMatches.length > 0) {
+                leaguesByCountryTemp[id] = leaguesWithMatches;
+              }
+            } else {
+              console.log(`No leagues found for countryId: ${id}`);
             }
-        };
-
-        fetchData();
-        /*
-        const intervalId = setInterval(() => {
-            fetchData(); // Belirli aralıklarla çalıştır
-        }, 30000); // 30 saniye
+          }
     
-        return () => clearInterval(intervalId); // Bileşen temizlendiğinde interval'i temizle
-        */
-    }, []);
+          setLeaguesByCountry(leaguesByCountryTemp);
+          setMatches(combinedMatches);
+        } catch (error) {
+          console.error("Error fetching data:", error);
+        } finally {
+          setLoading(false); // Veri çekme tamamlandığında yükleme durumu kapatılır
+        }
+      };
     
+      fetchData();
+    }, [day, month, year]); // day, month, year değiştiğinde yeniden çalıştır
 
-
-    if (matches.length === 0) {
-        return (
-            <View style={styles.loadingContainer}>
-                <Text>Veri bulunamadı.</Text>
-            </View>
-        );
+    if (loading) {
+      return (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#00ff00" />
+          <Text>Veriler yükleniyor, lütfen bekleyin...</Text>
+        </View>
+      );
     }
-
+    
+    if (matches.length === 0) {
+      return (
+        <View style={styles.noDataContainer}>
+          <Text>Veri bulunamadı.</Text>
+        </View>
+      );
+    }
+  if (error) {
+    return (
+        <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{error}</Text>
+            <TouchableOpacity style={styles.retryButton} onPress={() => setLoading(true)}>
+                <Text style={styles.retryButtonText}>Tekrar Dene</Text>
+            </TouchableOpacity>
+        </View>
+    );
+}
     return (
         <ScrollView>
         {countryId.map((country) => (
@@ -92,44 +118,51 @@ const FootballContent = () => {
   
                   {/* Bu Lige Ait Maçlar */}
                   {matches
-        .filter((match) => match.league_key === league.league_key)
-        .map((match) => (
-          <View key={match.event_key} style={styles.matchContainer}>
-            <View style={styles.matchRow}>
-              {/* Ev Sahibi Takım */}
-              <View style={styles.teamContainer}>
-                <Image style={styles.teamImage} source={{ uri: match.home_team_logo }} />
-                <Text style={styles.teamName}>{match.event_home_team}</Text>
-              </View>
-
-              {/* Skor ve Maç Durumu */}
-              <View style={styles.scoreStatusContainer}>
-                <Text
-                  style={[
-                    styles.status,
-                    match.event_status !== "Finished" && styles.notFinishedStatus, // Sadece status için koşullu stil
-                  ]}
-                >
-                  {match.event_status === "Finished" ? "MS" : match.event_status}
-                </Text>
-                <Text
-                  style={[
-                    styles.score,
-                    match.event_status !== "Finished" && styles.notFinishedScore, // Sadece score için koşullu stil
-                  ]}
-                >
-                  {match.event_final_result || "N/A"}
-                </Text>
-              </View>
-
-              {/* Deplasman Takımı */}
-              <View style={styles.teamContainer}>
-                <Text style={styles.teamName}>{match.event_away_team}</Text>
-                <Image style={styles.teamImage} source={{ uri: match.away_team_logo }} />
-              </View>
-            </View>
+  .filter((match) => match.league_key === league.league_key).length > 0 ? (
+  matches
+    .filter((match) => match.league_key === league.league_key)
+    .map((match) => (
+      <View key={match.event_key} style={styles.matchContainer}>
+        <View style={styles.matchRow}>
+          {/* Ev Sahibi Takım */}
+          <View style={styles.teamContainer}>
+            <Image style={styles.teamImage} source={{ uri: match.home_team_logo }} />
+            <Text style={styles.teamName}>{match.event_home_team}</Text>
           </View>
-        ))}
+
+          {/* Skor ve Maç Durumu */}
+          <View style={styles.scoreStatusContainer}>
+            <Text
+              style={[
+                styles.status,
+                match.event_status !== "Finished" && styles.notFinishedStatus, // Sadece status için koşullu stil
+              ]}
+            >
+              {match.event_status === "Finished" ? "MS" : match.event_status}
+            </Text>
+            <Text
+              style={[
+                styles.score,
+                match.event_status !== "Finished" && styles.notFinishedScore, // Sadece score için koşullu stil
+              ]}
+            >
+              {match.event_final_result || "N/A"}
+            </Text>
+          </View>
+
+          {/* Deplasman Takımı */}
+          <View style={styles.teamContainer}>
+            <Text style={styles.teamName}>{match.event_away_team}</Text>
+            <Image style={styles.teamImage} source={{ uri: match.away_team_logo }} />
+          </View>
+        </View>
+      </View>
+    ))
+) : (
+  <View style={styles.noMatchContainer}>
+    <Text style={styles.noMatchText}>Bu ligde bugün maç bulunmamaktadır.</Text>
+  </View>
+)}
                 </View>
               ))}
             </View>
@@ -185,6 +218,19 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
       
+    },
+    noMatchContainer: {
+      padding: 10,
+      backgroundColor: '#f9f9f9',
+      borderRadius: 5,
+      marginVertical: 5,
+      marginHorizontal: 10,
+      alignItems: 'center',
+    },
+    noMatchText: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      color: '#666',
     },
     teamContainer: {
         flexDirection: 'row',

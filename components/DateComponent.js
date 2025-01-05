@@ -5,7 +5,7 @@ import { AntDesign } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 
-const DateComponent = () => {
+const DateComponent = ({ onDateChange }) => {
   const currentDate = new Date();
   const currentDay = currentDate.getDate();
   const currentMonth = currentDate.getMonth();
@@ -27,8 +27,10 @@ const DateComponent = () => {
       const newDate = new Date(currentYear, currentMonth, selectedDay + i);
       newDaysList.push(newDate.getDate());
     }
-    setDaysList(newDaysList);
-  }, [selectedDay, currentMonth, currentYear]);
+    setDaysList(newDaysList); 
+       
+    onDateChange(selectedDay, selectedMonth, selectedYear);
+  }, [selectedDay, selectedMonth, selectedYear, onDateChange]);;
 
 
 
@@ -41,7 +43,7 @@ const DateComponent = () => {
   };
 
   const windowWidth = Dimensions.get('window').width;
-  console.log(selectedDay);
+ 
   
   return (
     <View style={styles.container}>
