@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import DateComponent from '../components/DateComponent.js';
 import FootballContent from '../components/FootballContent.js';
+import MatchDetails from '../components/MatchDetails.js';
+import FinishMatchDetails from '../components/FinishMatchDetails.js';
 
-const FootballPages = ({ navigation }) => {
+const MatchDetailsPage = ({ route }) => {
   const [day, setDay] = useState(new Date().getDate());
   const [month, setMonth] = useState(new Date().getMonth());
   const [year, setYear] = useState(new Date().getFullYear());
@@ -13,11 +15,12 @@ const FootballPages = ({ navigation }) => {
     setMonth(newMonth);
     setYear(newYear);
   };
+  const { match,status } = route.params;
+
 
   return (
     <View style={styles.container}>
-      <DateComponent onDateChange={handleDateChange} />
-      <FootballContent day={day} month={month} year={year} navigation={navigation} />
+    {status === "Finished" ? <FinishMatchDetails match={match} /> : <MatchDetails match={match} />}
     </View>
   );
 };
@@ -30,4 +33,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default FootballPages;
+export default MatchDetailsPage;

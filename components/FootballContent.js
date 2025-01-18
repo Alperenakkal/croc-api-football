@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useState } from 'react';
-import { Image, StyleSheet, Text, View, ActivityIndicator, ScrollView } from 'react-native';
+import { Image, StyleSheet, Text, View, ActivityIndicator, ScrollView, TouchableOpacity } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_KEY } from '@env';
 import {selectedDay, selectedMonth, selectedYear} from './DateComponent.js';
@@ -8,7 +8,19 @@ const formatMonth = (month) => {
   // Ay değerini 1 artır ve iki haneli hale getir (01, 02, ..., 12)
   return String(month + 1).padStart(2, '0');
 };
-const FootballContent = ({ day, month, year }) => {
+const getTurkeyTime = (eventTime) => {
+  // `eventTime` formatı "HH:mm" olarak geliyor (ör. "21:00")
+  const [hour, minute] = eventTime.split(':').map(Number);
+
+  // Yeni bir tarih nesnesi oluştur ve saat/minut ekle
+  const eventDate = new Date();
+  eventDate.setHours(hour + 2, minute); // Türkiye saatine göre 2 saat ekle
+
+  // Türkiye saati formatında "HH:mm" döndür
+  const turkeyTime = eventDate.toTimeString().slice(0, 5);
+  return turkeyTime;
+};
+const FootballContent = ({ day, month, year,navigation }) => {
     const [matches, setMatches] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -20,16 +32,14 @@ const FootballContent = ({ day, month, year }) => {
     useEffect(() => {
       const fetchData = async () => {
         try {
-          setLoading(true); // Yeni tarih seçildiğinde yükleme ekranını göster
+          setLoading(true);
           let combinedMatches = [];
           let leaguesByCountryTemp = {};
-     
-          
+    
           for (let i = 0; i < countryId.length; i++) {
             const id = countryId[i];
             const currentMonth = formatMonth(month);
-            
-            // Lig Bilgilerini Çek
+    
             const leagueResponse = await fetch(
               `https://apiv2.allsportsapi.com/football/?met=Leagues&APIkey=${API_KEY}&countryId=${id}`
             );
@@ -46,13 +56,12 @@ const FootballContent = ({ day, month, year }) => {
                 );
                 const matchData = await matchResponse.json();
     
-                // Maç kontrolü
                 if (
                   matchData.success === 1 &&
                   Array.isArray(matchData.result) &&
                   matchData.result.length > 0
                 ) {
-                  leaguesWithMatches.push(league); // Maçları olan ligleri ekle
+                  leaguesWithMatches.push(league);
                   combinedMatches = [...combinedMatches, ...matchData.result];
                 }
               }
@@ -60,22 +69,32 @@ const FootballContent = ({ day, month, year }) => {
               if (leaguesWithMatches.length > 0) {
                 leaguesByCountryTemp[id] = leaguesWithMatches;
               }
-            } else {
-              console.log(`No leagues found for countryId: ${id}`);
             }
           }
+    
+          // Maçları saatine göre sırala
+          combinedMatches.sort((a, b) => {
+            const [hourA, minuteA] = a.event_time.split(':').map(Number);
+            const [hourB, minuteB] = b.event_time.split(':').map(Number);
+    
+            if (hourA === hourB) {
+              return minuteA - minuteB; // Aynı saatlerde dakika karşılaştırması
+            }
+            return hourA - hourB; // Saat karşılaştırması
+          });
     
           setLeaguesByCountry(leaguesByCountryTemp);
           setMatches(combinedMatches);
         } catch (error) {
           console.error("Error fetching data:", error);
         } finally {
-          setLoading(false); // Veri çekme tamamlandığında yükleme durumu kapatılır
+          setLoading(false);
         }
       };
     
       fetchData();
-    }, [day, month, year]); // day, month, year değiştiğinde yeniden çalıştır
+    }, [day, month, year]);
+    
 
     if (loading) {
       return (
@@ -103,6 +122,10 @@ const FootballContent = ({ day, month, year }) => {
         </View>
     );
 }
+const handleMatchPress = (match) => {
+  console.log("Tıklanan maç:", match.event_key);
+  navigation.navigate('MatchDetailsPage', { match: match.event_key, status:match.event_status });
+};
     return (
         <ScrollView>
         {countryId.map((country) => (
@@ -122,7 +145,11 @@ const FootballContent = ({ day, month, year }) => {
   matches
     .filter((match) => match.league_key === league.league_key)
     .map((match) => (
-      <View key={match.event_key} style={styles.matchContainer}>
+      <TouchableOpacity
+        key={match.event_key}
+        style={styles.matchContainer}
+        onPress={() => handleMatchPress(match)} // Butona tıklandığında çalışacak fonksiyon
+      >
         <View style={styles.matchRow}>
           {/* Ev Sahibi Takım */}
           <View style={styles.teamContainer}>
@@ -134,16 +161,24 @@ const FootballContent = ({ day, month, year }) => {
           <View style={styles.scoreStatusContainer}>
             <Text
               style={[
-                styles.status,
-                match.event_status !== "Finished" && styles.notFinishedStatus, // Sadece status için koşullu stil
+                match.event_status === "Finished"
+                  ? styles.defaultStatus 
+                  : match.event_status === ""
+                  ? styles.inProgressStatus 
+                  : styles.notFinishedStatus, 
               ]}
             >
-              {match.event_status === "Finished" ? "MS" : match.event_status}
+              {match.event_status === "Finished" 
+                ? "MS" 
+                : match.event_status === "" 
+                ? getTurkeyTime(match.event_time)
+                : match.event_status}
             </Text>
             <Text
               style={[
-                styles.score,
-                match.event_status !== "Finished" && styles.notFinishedScore, // Sadece score için koşullu stil
+                match.event_status === "Finished" ? styles.score:
+                match.event_status === "" ? styles.inProgressScore:
+                styles.notFinishedScore, 
               ]}
             >
               {match.event_final_result || "N/A"}
@@ -156,13 +191,14 @@ const FootballContent = ({ day, month, year }) => {
             <Image style={styles.teamImage} source={{ uri: match.away_team_logo }} />
           </View>
         </View>
-      </View>
+      </TouchableOpacity>
     ))
 ) : (
   <View style={styles.noMatchContainer}>
     <Text style={styles.noMatchText}>Bu ligde bugün maç bulunmamaktadır.</Text>
   </View>
 )}
+
                 </View>
               ))}
             </View>
@@ -173,124 +209,155 @@ const FootballContent = ({ day, month, year }) => {
 };
 
 const styles = StyleSheet.create({
-    loadingContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    countryContainer: {
-        marginBottom: 20,
-        padding: 10,
-    },
-    countryHeader: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        marginBottom: 10,
-        textAlign: 'center',
-    },
-    leagueContainer: {
-        marginBottom: 20,
-    },
-    leagueHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 10,
-        backgroundColor: '#e6e6e6',
-        borderRadius: 5,
-        marginHorizontal: 10,
-    },
-    leagueName: {
-        marginLeft: 10,
-        fontWeight: 'bold',
-        fontSize: 20,
-        flexShrink: 1,
-        flexWrap: 'wrap',
-    },
-    matchContainer: {
-        padding: 10,
-        backgroundColor: '#f9f9f9',
-        borderRadius: 5,
-        marginVertical: 5,
-        marginHorizontal: 10,
-    },
-    matchRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-      
-    },
-    noMatchContainer: {
-      padding: 10,
-      backgroundColor: '#f9f9f9',
-      borderRadius: 5,
-      marginVertical: 5,
-      marginHorizontal: 10,
-      alignItems: 'center',
-    },
-    noMatchText: {
-      fontSize: 16,
-      fontWeight: 'bold',
-      color: '#666',
-    },
-    teamContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        maxWidth: '40%',
-        flex:1,
-    },
-    scoreStatusContainer: {
-        alignItems: 'center',
-        marginHorizontal: 10, // Daha iyi bir aralık için
-    },
-    teamName: {
-        marginLeft: 10,
-        fontWeight: 'bold',
-        fontSize: 14,
-        flexShrink: 1,
-        flexWrap: 'wrap',
-    },
-    teamImage: {
-        width: 40,
-        height: 40,
-        resizeMode: 'contain',
-    },
-    notFinishedScore: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        textAlign: 'center',
-        color: 'white', // Varsayılan renk (MS olanlar için)
-        backgroundColor: 'orange',
-        borderRadius: 3,
-    },
-    score: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        textAlign: 'center',
-        color: 'black', // Varsayılan renk (MS olanlar için)
-        backgroundColor: 'transparent', // Ekle
-    },
-    image: {
-        width: 30,
-        height: 30,
-        resizeMode: 'contain',
-    },
-    status: {
-        fontSize: 14,
-        fontWeight: 'bold',
-        textAlign: 'center',
-        color: '#333',
-        marginBottom:2,
-    },
-    notFinishedStatus:{
-        fontSize: 14,
-        fontWeight: 'bold',
-        textAlign: 'center',
-        color: 'white',
-        backgroundColor: 'orange',
-        marginBottom:2, 
-        borderRadius: 3,
-        width: 50
-    }
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f2f2f2', // Hafif bir arka plan rengi
+  },
+  noDataContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: '#f2f2f2',
+  },
+  countryContainer: {
+    marginBottom: 16,
+    padding: 12,
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3, // Android gölgelendirme
+  },
+  leagueContainer: {
+    marginBottom: 12,
+  },
+  leagueHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    backgroundColor: '#eeeeee',
+    borderRadius: 8,
+  },
+  leagueName: {
+    marginLeft: 10,
+    fontWeight: 'bold',
+    fontSize: 16,
+    color: '#333',
+  },
+  matchContainer: {
+    padding: 12,
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+    marginVertical: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  
+  matchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  noMatchContainer: {
+    padding: 12,
+    backgroundColor: '#f9f9f9',
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  noMatchText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+  },
+  teamContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  teamName: {
+    marginLeft: 10,
+    fontWeight: '600',
+    fontSize: 14,
+    color: '#333',
+  },
+  teamImage: {
+    width: 40,
+    height: 40,
+    resizeMode: 'contain',
+  },
+  scoreStatusContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 12,
+  },
+  notFinishedScore: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: 'white',
+    backgroundColor: '#FF9800',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  inProgressScore: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: 'white',
+    backgroundColor: '#66BB6A',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  score: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    backgroundColor: 'transparent',
+  },
+  notFinishedStatus: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    color: 'white',
+    backgroundColor: '#FF9800',
+    borderRadius: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    alignSelf: 'center',
+  },
+  inProgressStatus: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    color: 'white',
+    backgroundColor: '#4CAF50',
+    borderRadius: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    alignSelf: 'center',
+  },
+  defaultStatus: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    color: '#666',
+  },
+  image: {
+    width: 30,
+    height: 30,
+    resizeMode: 'contain',
+  },
 });
+
 
 export default FootballContent;
