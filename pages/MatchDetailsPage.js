@@ -3,6 +3,8 @@ import { View, StyleSheet } from 'react-native';
 import DateComponent from '../components/DateComponent.js';
 import FootballContent from '../components/FootballContent.js';
 import MatchDetails from '../components/MatchDetails.js';
+
+import EarlyMatchDetails from '../components/EarlyMatchDetails.js';
 import FinishMatchDetails from '../components/FinishMatchDetails.js';
 
 const MatchDetailsPage = ({ route }) => {
@@ -18,9 +20,17 @@ const MatchDetailsPage = ({ route }) => {
   const { match,status } = route.params;
 
 
+  
   return (
     <View style={styles.container}>
-    {status === "Finished" ? <FinishMatchDetails match={match} /> : <MatchDetails match={match} />}
+  {status === "" ? (
+  <EarlyMatchDetails match={match} />
+) : status === "Finished" ? (
+  <FinishMatchDetails match={match} />
+) : (
+  <MatchDetails match={match} />
+)}
+
     </View>
   );
 };

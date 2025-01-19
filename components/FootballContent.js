@@ -2,24 +2,14 @@ import React, { useContext, useEffect, useState } from 'react';
 import { Image, StyleSheet, Text, View, ActivityIndicator, ScrollView, TouchableOpacity } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_KEY } from '@env';
-import {selectedDay, selectedMonth, selectedYear} from './DateComponent.js';
+import { getTurkeyTime } from './timeUtils.js';
+
 
 const formatMonth = (month) => {
   // Ay değerini 1 artır ve iki haneli hale getir (01, 02, ..., 12)
   return String(month + 1).padStart(2, '0');
 };
-const getTurkeyTime = (eventTime) => {
-  // `eventTime` formatı "HH:mm" olarak geliyor (ör. "21:00")
-  const [hour, minute] = eventTime.split(':').map(Number);
 
-  // Yeni bir tarih nesnesi oluştur ve saat/minut ekle
-  const eventDate = new Date();
-  eventDate.setHours(hour + 2, minute); // Türkiye saatine göre 2 saat ekle
-
-  // Türkiye saati formatında "HH:mm" döndür
-  const turkeyTime = eventDate.toTimeString().slice(0, 5);
-  return turkeyTime;
-};
 const FootballContent = ({ day, month, year,navigation }) => {
     const [matches, setMatches] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -126,6 +116,7 @@ const handleMatchPress = (match) => {
   console.log("Tıklanan maç:", match.event_key);
   navigation.navigate('MatchDetailsPage', { match: match.event_key, status:match.event_status });
 };
+  
     return (
         <ScrollView>
         {countryId.map((country) => (

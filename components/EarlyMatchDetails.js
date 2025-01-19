@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Image, ScrollView, ActivityIndicator, ImageBackground } from 'react-native';
 import { API_KEY } from '@env';
-import MatchSummary from './MatchSummary'; // MatchSummary bileşenini import ediyoruz
+import { formatDate, getTurkeyTime } from './timeUtils';
+import H2HMatchDetails from './H2HMatchDetails';
 import Icon from 'react-native-vector-icons/Ionicons';
+import Icon2 from 'react-native-vector-icons/MaterialCommunityIcons'
 
-
-const FinishMatchDetails = ({ match }) => {
+const EarlyMatchDetails = ({ match }) => {
   const [matchDetails, setMatchDetails] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -49,50 +50,11 @@ const FinishMatchDetails = ({ match }) => {
       </View>
     );
   }
-
-  // Etkinlikleri düzenliyoruz
-  const events = [];
-
-  matchDetails.goalscorers.forEach(goal => {
-    const isHome = !!goal.home_scorer;
-    events.push({
-      time: goal.time,
-      icon: <Icon name="football" size={20} color="#FFD700" />, // Gol ikonu
-      description: `${isHome ? goal.home_scorer : goal.away_scorer} gol attı (${isHome ? matchDetails.event_home_team : matchDetails.event_away_team})`,
-      isHome,
-      type: 'goal',
-    });
-  });
-
-  matchDetails.cards.forEach(card => {
-    const isHome = !!card.home_fault;
-    const cardType = card.card === 'yellow card' ? 'yellow_card' : 'red_card';
-    events.push({
-      time: card.time,
-      icon: <Icon name={card.card === 'yellow card' ? 'warning' : 'close'} size={20} color={card.card === 'yellow card' ? '#FFD700' : '#FF0000'} />, // Kart ikonu
-      description: `${isHome ? card.home_fault : card.away_fault} ${card.card === 'yellow card' ? 'Sarı kart' : 'Kırmızı kart'} gördü (${isHome ? matchDetails.event_home_team : matchDetails.event_away_team})`,
-      isHome,
-      type: cardType,
-    });
-  });
-
-  matchDetails.substitutes.forEach(sub => {
-    if (sub.home_scorer?.in || sub.away_scorer?.in) {
-      const isHome = !!sub.home_scorer?.in;
-      events.push({
-        time: sub.time,
-        icon: <Icon name="swap-horizontal" size={20} color="#32CD32" />, // Oyuncu değişikliği ikonu
-        description: `Giren: ${isHome ? sub.home_scorer.in : sub.away_scorer.in}, Çıkan: ${isHome ? sub.home_scorer.out : sub.away_scorer.out} (${isHome ? matchDetails.event_home_team : matchDetails.event_away_team})`,
-        isHome,
-        type: 'substitution',
-      });
-    }
-  });
-
-  events.sort((a, b) => parseInt(a.time) - parseInt(b.time));
-
+  console.log("early match");
+  
   return (
     <ScrollView style={styles.container}>
+      {/* Başlık ve Takımlar */}
       <View style={styles.header}>
         <View style={styles.teamContainer}>
           <ImageBackground
@@ -105,8 +67,8 @@ const FinishMatchDetails = ({ match }) => {
           </ImageBackground>
         </View>
         <View style={styles.dateTimeContainer}>
-          <Text style={styles.dateTime}>MS</Text>
-          <Text style={styles.time}>{matchDetails.event_final_result}</Text>
+          <Text style={styles.dateTime}>{formatDate(matchDetails.event_date)}</Text>
+          <Text style={styles.time}>{getTurkeyTime(matchDetails.event_time)}</Text>
         </View>
         <View style={styles.teamContainer}>
           <ImageBackground
@@ -120,9 +82,33 @@ const FinishMatchDetails = ({ match }) => {
         </View>
       </View>
 
-      {/* Özet Bileşeni */}
-      <Text style={styles.title}>ÖZET</Text>
-      <MatchSummary events={events} />
+      {/* H2H Bilgileri */}
+      <H2HMatchDetails
+        firstTeamId={matchDetails.home_team_key}
+        secondTeamId={matchDetails.away_team_key}
+        matchDetails={matchDetails}
+      />
+
+      {/* Genel Bilgiler */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Genel Bilgiler</Text>
+        <View style={styles.infoRow}>
+          <Icon name="football-outline" size={20} color="#FFD700" style={styles.icon} />
+          <Text style={styles.infoText}>Lig: {matchDetails.league_name}</Text>
+        </View>
+        <View style={styles.infoRow}>
+          <Icon name="location-outline" size={20} color="#FFD700" style={styles.icon} />
+          <Text style={styles.infoText}>Stadyum: {matchDetails.event_stadium}</Text>
+        </View>
+        <View style={styles.infoRow}>
+          <Icon2 name="whistle" size={20} color="#FFD700" style={styles.icon} />
+          <Text style={styles.infoText}>Hakem: {matchDetails.event_referee}</Text>
+        </View>
+        <View style={styles.infoRow}>
+          <Icon name="time-outline" size={20} color="#FFD700" style={styles.icon} />
+          <Text style={styles.infoText}>Durum: {matchDetails.event_status}</Text>
+        </View>
+      </View>
     </ScrollView>
   );
 };
@@ -130,7 +116,7 @@ const FinishMatchDetails = ({ match }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#F8F8FF', // Arka plan artık koyu gri bir renk
     padding: 10,
   },
   loadingContainer: {
@@ -139,7 +125,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    color: '#6A5ACD',
+    color: '#32CD32', // Premium yeşil
     fontSize: 16,
     marginTop: 10,
   },
@@ -149,7 +135,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   errorText: {
-    color: '#FF6347',
+    color: '#32CD32', // Premium yeşil
     fontSize: 16,
   },
   header: {
@@ -157,75 +143,86 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 20,
-    backgroundColor: '#FFFFFF',
-    padding: 10,
-    borderRadius: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 5,
   },
   teamContainer: {
     alignItems: 'center',
     flex: 1,
   },
   teamBackground: {
-    width: 100,
-    height: 100,
+    width: 120,
+    height: 120,
     justifyContent: 'center',
     alignItems: 'center',
     margin: 5,
   },
   imageBackgroundStyle: {
-    opacity: 0.2,
+    opacity: 0.1,
     resizeMode: 'contain',
   },
   teamLogo: {
     width: 60,
     height: 60,
     marginBottom: 5,
-    borderRadius: 30,
-    borderWidth: 1,
-    borderColor: '#D3D3D3',
+    
   },
   teamNames: {
     textAlign: 'center',
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#333333',
+    color: '#333333', // Premium yeşil
     textTransform: 'uppercase',
     marginTop: 5,
   },
   dateTimeContainer: {
     alignItems: 'center',
     justifyContent: 'center',
+    marginHorizontal: 10,
     padding: 10,
-    backgroundColor: '#F0F0F0',
+    backgroundColor: '#2A2A2A', // Daha koyu bir arka plan rengi
     borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#32CD32', // Premium yeşil detay
   },
   dateTime: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
-    color: '#696969',
+    color: '#FFFFFF',
+    marginBottom: 4,
   },
   time: {
-    fontSize: 28,
+    fontSize: 18,
     fontWeight: 'bold',
-    color: '#4682B4',
+    color: '#32CD32', // Premium yeşil
   },
-  title: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: '#000',
-    textAlign: 'center',
+  section: {
     marginBottom: 20,
+    backgroundColor: '#2A2A2A',
+    padding: 15,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginTop:30,
+    borderColor: '#32CD32', // Premium yeşil detay
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#C0C0C0', // Premium yeşil
+    marginBottom: 10,
+    textAlign: 'center',
     textTransform: 'uppercase',
-    letterSpacing: 3,
-    borderBottomWidth: 2,
-    borderBottomColor: '#FFD700',
-    paddingBottom: 5,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  icon: {
+    marginRight: 10,
+  },
+  infoText: {
+    fontSize: 16,
+    color: '#C0C0C0', // Premium yeşil
   },
 });
 
-export default FinishMatchDetails;
+export default EarlyMatchDetails;
